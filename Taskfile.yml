@@ -24,11 +24,17 @@ tasks:
           fi
         done < "$repos_file"
 
-        # Recursively find subdirectories and run clone-repos task in each
-        if [ "$(pwd)" != "/" ]; then
-          find ./clients -mindepth 1 -maxdepth 1 -type d -not -path "./clients/generated-types" -exec sh -c 'cd {}; ./task-wrapper.sh clone-repos' \;
+        # Check if the clients directory exists
+        if [ -d "./clients" ]; then
+          # Recursively find subdirectories and run clone-repos task in each
+          if [ "$(pwd)" != "/" ]; then
+            find ./clients -mindepth 1 -maxdepth 1 -type d -not -path "./clients/generated-types" -exec sh -c 'cd {}; ./task-wrapper.sh clone-repos' \;
+          fi
+        else
+          echo "clients directory does not exist. Skipping further checks."
         fi
         EOF
+        
 
   pull-repos:
     desc: Pull all repositories for the root and all clients

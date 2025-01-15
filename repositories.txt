@@ -1,3 +1,4 @@
+//General Elody repositories
 git@github.com:inuits/elody-pwa.git inuits-dams-pwa
 git@github.com:inuits/elody-advanced-filter-module.git modules/advancedFiltersModule
 git@github.com:inuits/elody-base-graphql.git modules/baseGraphql
@@ -14,3 +15,6 @@ git@github.com:inuits/elody-ocr-service.git ocr-service
 git@github.com:inuits/elody-filesystem-importer-service.git filesystem-importer-service
 git@github.com:inuits/elody-cypress.git cypress
 git@github.com:inuits/elody-session-vue-3-oidc-library.git packages/session-vue-3-oidc-library
+
+//Client repository
+//EXAMPLE: git@github.com:inuits/customers/my-client/my-client-common.git clients/my-client
