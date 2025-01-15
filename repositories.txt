@@ -1,0 +1,16 @@
+git@github.com:inuits/elody-pwa.git inuits-dams-pwa
+git@github.com:inuits/elody-advanced-filter-module.git modules/advancedFiltersModule
+git@github.com:inuits/elody-base-graphql.git modules/baseGraphql
+git@github.com:inuits/elody-import-module.git modules/importModule
+git@github.com:inuits/elody-saved-search-module.git modules/savedSearchModule
+git@github.com:inuits/elody-advanced-search-module.git modules/advancedSearchModule
+git@github.com:inuits/elody-collection.git collection-api
+git@github.com:inuits/elody-storage.git storage-api
+git@github.com:inuits/elody-antivirus-service.git dams-antivirus-service
+git@github.com:inuits/elody-cantaloupe.git dams-cantaloupe
+git@github.com:inuits/elody-transcode-service.git dams-transcode-service
+git@github.com:inuits/elody-iiif-manifest-mapper.git inuits-dams-iiif-manifest-mapper
+git@github.com:inuits/elody-ocr-service.git ocr-service
+git@github.com:inuits/elody-filesystem-importer-service.git filesystem-importer-service
+git@github.com:inuits/elody-cypress.git cypress
+git@github.com:inuits/elody-session-vue-3-oidc-library.git packages/session-vue-3-oidc-library

@@ -1,0 +1,183 @@
+version: "3.4"
+
+services:
+
+  # Traefik: https://doc.traefik.io/traefik/
+  traefik:
+    image: traefik:v2.5
+    volumes:
+      - "${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro"
+    command:
+      - --log.level=INFO
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --api.insecure=true # TODO
+      - --entrypoints.web.address=:80
+      - --entrypoints.udp.address=:80/udp
+      - --accesslog=true
+    networks:
+      - traefik
+      - elody
+    ports:
+      - "${PROJECT_PORT}:80"
+      - "8080"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
+      - "traefik.http.services.traefik.loadbalancer.server.port=8080"
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2021-07-27T02-40-15Z
+    platform: linux/amd64
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+      # Do NOT use MINIO_DOMAIN or MINIO_SERVER_URL with Traefik
+      - MINIO_BROWSER_REDIRECT_URL=http://minio-console.localhost:${PROJECT_PORT}
+    volumes:
+      - minio:/data
+    entrypoint: sh
+    command:
+      - "-c"
+      - rm -rf /data/dams-iiif-cache && mkdir -p /data/elody && mkdir -p /data/dams && mkdir -p /data/dams-iiif-cache && /usr/bin/minio server /data --console-address ":9001"
+    networks:
+      - elody
+    expose:
+      - "9000"
+      - "9001"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.minio.service=minio"
+      - "traefik.http.routers.minio.rule=Host(`minio.localhost`)"
+      - "traefik.http.services.minio.loadbalancer.server.port=9000"
+      - "traefik.http.routers.minio-console.service=minio-console"
+      - "traefik.http.routers.minio-console.rule=Host(`minio-console.localhost`)"
+      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+
+  mongo:
+    image: mongo:4.0.0
+    volumes:
+      - mongo:/data/db
+    command: --nojournal
+    networks:
+      - elody
+    expose:
+      - "27017"
+
+  arangodb:
+    image: arangodb:3.10
+    environment:
+      - ARANGO_DB_NAME
+      - ARANGO_ROOT_PASSWORD
+      - ARANGO_READER_USERNAME
+      - ARANGO_READER_PASSWORD
+    volumes:
+      - arango:/var/lib/arangodb3
+      - ./docker-compose/arango/create-arango-users.js:/docker-entrypoint-initdb.d/create-arango-users.js
+      - ./docker-compose/arango/entrypoint.sh:/entrypoint.sh
+    networks:
+      - elody
+    expose:
+      - "8529"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.arangodb.rule=Host(`arangodb.localhost`) && PathPrefix(`/`)"
+      - "traefik.http.services.arangodb.loadbalancer.server.port=8529"
+
+  keycloakdb:
+    image: mariadb:10.8.2
+    environment:
+      - MYSQL_ROOT_PASSWORD=ROOT
+      - MYSQL_DATABASE=keycloak
+    volumes:
+      - keycloak:/var/lib/mysql
+    networks:
+      - elody
+    expose:
+      - "3306"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:22.0.1
+    networks:
+      - elody
+    command:
+      - start-dev
+    ports:
+      - "${PROJECT_PORT}" # Run on the same port as the external traefik url
+    environment:
+      - KC_DB=mariadb
+      - KC_DB_URL_HOST=keycloakdb
+      - KC_DB_URL_DATABASE=keycloak
+      - KC_DB_USERNAME=root
+      - KC_DB_PASSWORD=ROOT
+      - KC_PROXY=edge
+      - KC_HTTP_ENABLED=true
+      - KC_HTTP_PORT=${PROJECT_PORT} # Run on the same port as the external traefik url
+      - KC_HTTP_RELATIVE_PATH=/auth
+      - KC_LOG_LEVEL=INFO
+      - KEYCLOAK_ADMIN=${LOCAL_KEYCLOAK_MASTER_USER-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${LOCAL_KEYCLOAK_MASTER_PASSWORD-admin}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.keycloak.rule=Host(`keycloak.localhost`)"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=${PROJECT_PORT}"
+
+  rabbitmq:
+    domainname: rabbitmq.com
+    image: rabbitmq:3.8-management-alpine
+    expose:
+      - 5672
+    networks:
+      - elody
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rabbitmq.rule=Host(`rabbitmq.localhost`)"
+      - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  dozzle:
+    image: amir20/dozzle
+    volumes:
+      - "${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro"
+    networks:
+      - traefik
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.dozzle.rule=Host(`dozzle.localhost`) || Host(`logs.localhost`)"
+      - "traefik.http.routers.dozzle.entrypoints=web"
+      - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
+    restart: unless-stopped
+
+  cypress:
+    image: cypress/included:latest
+    environment:
+      - NPM_CONFIG_REGISTRY
+      - NPM_CONFIG__AUTH_TOKEN
+    volumes:
+      - ./cypress:/cypress
+    networks:
+      - elody
+    expose:
+      - "8080"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cypress.rule=Host(`cypress.localhost`)"
+      - "traefik.http.services.cypress.loadbalancer.server.port=8080"
+    entrypoint: ["/bin/sh", "-c", "cd /cypress && npm install && npx cypress install && npx cypress run"]
+
+networks:
+  traefik:
+  elody:
+    name: elody
+
+volumes:
+  minio:
+  mongo:
+  arango:
+  keycloak:

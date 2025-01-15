@@ -1,0 +1,32 @@
+services:
+  antivirus-service:
+    image: inuits-elody-${TRAEFIK_PROJECT_NAMESPACE}-antivirus-service:local-dev
+    platform: linux/amd64
+    build:
+      context: dams-antivirus-service
+      dockerfile: docker/Dockerfile
+      target: development-stage
+    environment:
+      - DOCKER_BUILDKIT
+
+      - MQ_URL
+      - MQ_EXCHANGE
+
+      - COLLECTION_API_URL
+
+      - APP_ENV=dev
+    volumes:
+      - "./dams-antivirus-service/api:/app/api"
+    depends_on:
+      - collection-api
+      - storage-api
+    networks:
+      elody:
+        aliases:
+          - antivirus-service-${PROJECT_FOLDER}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${TRAEFIK_PROJECT_NAMESPACE}-antivirus-service.rule=Host(`antivirus-service.${PROJECT_DOMAIN}`) && PathPrefix(`/`)" # TODO change Host to api.[...]
+      - "traefik.http.services.${TRAEFIK_PROJECT_NAMESPACE}-antivirus-service.loadbalancer.server.port=5000"
+    profiles:
+      - backend

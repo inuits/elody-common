@@ -1,0 +1,56 @@
+services:
+  storage-api:
+      image: inuits-elody-${TRAEFIK_PROJECT_NAMESPACE}-storage-api:local-dev
+      platform: linux/amd64
+      build:
+        context: storage-api
+        dockerfile: docker/Dockerfile
+        target: development-stage
+      environment:
+        - DOCKER_BUILDKIT
+
+        - MQ_URL
+        - MQ_EXCHANGE
+
+        - MINIO_ENDPOINT # TODO rename these to S3?
+        - MINIO_ACCESS_KEY
+        - MINIO_SECRET_KEY
+        - MINIO_BUCKET
+
+        - COLLECTION_API_URL
+        - STORAGE_API_URL
+        - JOB_API_URL
+        - DAMS_FRONTEND_URL
+        - DUPLICATE_FILE_CHECK
+
+        - ALLOWED_ISSUERS
+        - STATIC_JWT
+        - STATIC_ISSUER
+        - STATIC_PUBLIC_KEY
+        - ROLE_SCOPE_MAPPING
+        - TOKEN_SCHEMA
+        - SUPER_ADMIN_ROLE
+
+        - APPS_MANIFEST
+        - ENABLE_MULTITENANCY
+        - AUTO_CREATE_TENANTS
+
+        - ARANGO_DB_HOST
+
+        - APP_ENV=dev
+      volumes:
+        - "./clients/${PROJECT_FOLDER}/docker-compose/elody/role_scope_mapping.json:/app/role_scope_mapping.json"
+        - "./clients/${PROJECT_FOLDER}/docker-compose/storage-api/app_list.json:/app/api/apps/app_list.json"
+        - "./clients/${PROJECT_FOLDER}/docker-compose/elody/token_schema.json:/app/token_schema.json"
+        - "./storage-api/api:/app/api"
+      networks:
+        elody:
+          aliases:
+            - storage-api-${PROJECT_FOLDER}
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.${TRAEFIK_PROJECT_NAMESPACE}-storage-api.rule=Host(`storage-api.${PROJECT_DOMAIN}`) && PathPrefix(`/`)" # TODO change Host to api.[...]
+        - "traefik.http.services.${TRAEFIK_PROJECT_NAMESPACE}-storage-api.loadbalancer.server.port=5000"
+      profiles:
+        - backend
+        - import

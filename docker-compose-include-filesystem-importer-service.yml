@@ -1,0 +1,54 @@
+services:
+  filesystem-importer-service:
+      image: inuits-elody-${TRAEFIK_PROJECT_NAMESPACE}-filesystem-importer-service:local-dev
+      platform: linux/amd64
+      build:
+        context: filesystem-importer-service
+        dockerfile: docker/Dockerfile
+        target: development-stage
+      environment:
+        - APP_ENV=dev
+
+        - DOCKER_BUILDKIT
+
+        - AUTO_DELETE_EXCHANGE
+        - DURABLE_EXCHANGE
+        - EVENT_DELAY=0
+        - MQ_EXCHANGE
+        - MQ_URL
+        - PASSIVE_EXCHANGE
+
+        - COLLECTION_API_URL
+        - JOB_API_URL
+
+        - APPS_MANIFEST
+        - AUTO_CREATE_TENANTS
+        - IGNORE_PERMISSIONS
+        - ROLE_SCOPE_MAPPING
+        - TOKEN_SCHEMA
+        - SUPER_ADMIN_ROLE
+        - TENANT_DEFINING_HEADER
+        - TENANT_DEFINING_TYPES
+        - ALLOWED_ISSUERS
+        - STATIC_JWT
+        - STATIC_ISSUER
+        - STATIC_PUBLIC_KEY
+
+        - UPLOAD_SOURCE
+      volumes:
+        - "./clients/${PROJECT_FOLDER}/docker-compose/elody/role_scope_mapping.json:/app/role_scope_mapping.json"
+        - "./clients/${PROJECT_FOLDER}/docker-compose/storage-api/app_list.json:/app/api/apps/app_list.json"
+        - "./clients/${PROJECT_FOLDER}/docker-compose/elody/token_schema.json:/app/token_schema.json"
+        - "./filesystem-importer-service/api:/app/api"
+        - "./filesystem-importer-service/files:/files"
+      networks:
+        elody:
+          aliases:
+          - filesystem-importer-service-${PROJECT_FOLDER}
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.${TRAEFIK_PROJECT_NAMESPACE}-filesystem-importer-service.rule=Host(`filesystem-importer-service.${PROJECT_DOMAIN}`) && PathPrefix(`/`)" # TODO change Host to api.[...]
+        - "traefik.http.services.${TRAEFIK_PROJECT_NAMESPACE}-filesystem-importer-service.loadbalancer.server.port=5000"
+      profiles:
+        - backend
+        - import

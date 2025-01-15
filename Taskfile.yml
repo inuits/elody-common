@@ -1,0 +1,302 @@
+version: '3'
+
+dotenv: ['.env']
+
+tasks:
+  silent: true
+
+  clone-repos:
+    desc: Clone all reposities
+    cmds:
+      - |
+        /bin/bash <<'EOF'
+        repos_file="repositories.txt"
+
+        while IFS= read -r line; do
+          url=$(echo "$line" | awk '{print $1}')
+          folder=$(echo "$line" | awk '{print $2}')
+
+          # Check if the folder already exists
+          if [ -d "$folder" ]; then
+            echo "Repository '$folder' already exists. Skipping."
+          else
+            git clone "$url" "$folder"
+          fi
+        done < "$repos_file"
+
+        # Recursively find subdirectories and run clone-repos task in each
+        if [ "$(pwd)" != "/" ]; then
+          find ./clients -mindepth 1 -maxdepth 1 -type d -not -path "./clients/generated-types" -exec sh -c 'cd {}; ./task-wrapper.sh clone-repos' \;
+        fi
+        EOF
+
+  pull-repos:
+    desc: Pull all repositories for the root and all clients
+    cmds:
+      - |
+        find . -type d -name .git -exec sh -c 'cd $(dirname {}); printf "Pulling %s/%s...\n" "$(basename "$(dirname "$PWD")")" "${PWD##*/}"; git pull; echo' \;
+
+  create-pip-conf:
+    desc: Create pip files based on templates for the flask services
+    vars:
+      MY_VAR:
+        sh: find . -type f -name 'pip.conf.template'
+    cmds:
+      - for: { var: MY_VAR }
+        cmd: | 
+             target="$(basename "{{ .ITEM }}" .template)"
+             path_without_filename="$(dirname "{{ .ITEM }}")"
+             echo $target
+             printf "[global]\nindex-url = https://pypi.python.org/simple\nindex = https://pypi.python.org/simple\ntrusted-host = https://pypi.python.org/simple\n" > "$path_without_filename/$target"
+
+  create-env:
+    desc: Create env for root an all clients
+    vars:
+      MY_VAR:
+        sh: find . -type f -name '.env.dist'
+    cmds:
+      - for: { var: MY_VAR }
+        cmd: |
+             env="{{ .ITEM }}"
+             env="${env/.dist/}"
+              
+             if [ ! -f "$env" ]; then
+               cp "$env.dist" "$env"
+             fi
+  setup-env:
+    desc: Clone / Pull all repo's, create the env and pip files for all clients
+    cmds:
+      - task: clone-repos
+      - task: pull-repos
+      - task: remove-env
+      - task: create-env
+      - task: create-pip-conf
+      - task: build-common
+
+  remove-env:
+    desc: Remove env for root an all clients
+    vars:
+      MY_VAR:
+        sh: find . -type f -name '.env.dist'
+    cmds:
+      - for: { var: MY_VAR }
+        cmd: |
+             env="{{ .ITEM }}"
+             env="${env/.dist/}"
+              
+             rm -f $env
+
+  build-common:
+    desc: Build containers for root
+    args:
+      - client
+    cmds:
+      - |
+        $DOCKER_COMPOSE build
+
+  build-client:
+    desc: Build containers for client
+    cmds:
+      - |
+        client="$(./task-wrapper.sh chose-client)"
+        cd "clients/$client" && $DOCKER_COMPOSE --profile frontend --profile backend --profile import build
+
+  start-root:
+    desc: Start the containers in the root, these are used for all containers
+    cmds:
+      -  |
+         $DOCKER_COMPOSE -f docker-compose.yml up -d
+
+  stop-root:
+    desc: Stop the containers in the root
+    cmds:
+      - |
+        $DOCKER_COMPOSE -f docker-compose.yml down 
+
+  start-client:
+    desc: Start containers for a specific client.
+    cmds:
+      - |
+        client="$(./task-wrapper.sh chose-client)"
+        root_compose_status=$($DOCKER_COMPOSE -f docker-compose.yml ps --quiet)
+
+        if [ -z "$root_compose_status" ]; then
+          echo "Root Docker Compose is not running. Starting..."
+          ./task-wrapper.sh start-root
+        else
+          echo "Root Docker Compose is already running."
+        fi
+
+        cd "clients/$client"  && $DOCKER_COMPOSE --profile frontend --profile backend up -d
+
+  stop-client:
+    desc: Stop containers for a specific client.
+    cmds:
+      - |
+        client="$(./task-wrapper.sh chose-client)"
+        cd "clients/$client" && $DOCKER_COMPOSE --profile frontend --profile backend  down 
+
+ 
+
+  chose-client:
+    cmds:
+      - |
+        directory="./clients"
+        options=($(find "$directory" -mindepth 1 -maxdepth 1 -type d -not -path "$directory/generated-types" -exec basename {} \; | sort))
+
+        select folder in "${options[@]}"; do
+            if [ -n "$folder" ]; then
+                client="$folder"
+                break
+            else
+                echo "Invalid option"
+            fi
+        done
+        
+        echo "$client"
+
+  generate:
+    desc: Generate the queries for the frontend of a specific client
+    interactive: true
+    cmds:
+      - silent: true
+        cmd: |
+             client="$(./task-wrapper.sh chose-client)"
+             cd "clients/$client" && $DOCKER_COMPOSE exec -w /app dashboard pnpm run generate
+             $DOCKER_COMPOSE cp dashboard:/app/inuits-dams-pwa/src/generated-types ../../inuits-dams-pwa/src/
+             $DOCKER_COMPOSE cp dashboard:/app/inuits-dams-graphql-service/generated-types ../../
+             $DOCKER_COMPOSE cp dashboard:/app/inuits-dams-graphql-service/generated-types ../ 
+
+  import-mongo-data:
+    desc: Import `${client-folder}/docker-compose/mongo/init-data.js` in the root mongo container
+    cmds:
+      - |
+        client="$(./task-wrapper.sh chose-client)"
+        DATA_FILE="clients/$client/docker-compose/mongo/init-data.js"
+        $DOCKER_COMPOSE cp "$DATA_FILE" mongo:/tmp/
+        $DOCKER_COMPOSE  exec mongo chmod +x /tmp/init-data.js
+        $DOCKER_COMPOSE exec mongo mongo /tmp/init-data.js
+
+  
+  import-arango-data:
+    desc: Import data into ArangoDB
+    cmds:
+      - |
+        TENANTS_FILE="clients/coghent-dams/docker-compose/arango/init-tenants.json"
+        USERS_FILE="clients/coghent-dams/docker-compose/arango/init-users.json"
+        $DOCKER_COMPOSE cp "$TENANTS_FILE" arangodb:/tmp/
+        $DOCKER_COMPOSE cp "$USERS_FILE" arangodb:/tmp/
+        $DOCKER_COMPOSE exec arangodb chmod +x /tmp/init-tenants.json
+        $DOCKER_COMPOSE exec arangodb chmod +x /tmp/init-users.json
+        $DOCKER_COMPOSE exec arangodb sh -c 'arangoimport --file "/tmp/init-tenants.json" --server.database "$ARANGO_DB_NAME" --server.password "$ARANGO_ROOT_PASSWORD" --type json --collection "entities"'
+        $DOCKER_COMPOSE exec arangodb sh -c 'arangoimport --file "/tmp/init-users.json" --server.database "$ARANGO_DB_NAME" --server.password "$ARANGO_ROOT_PASSWORD" --type json --collection "users"'
+        cd "clients/coghent-dams"
+        $DOCKER_COMPOSE run --rm ldes-import-service
+        $DOCKER_COMPOSE run --rm convert-images
+        $DOCKER_COMPOSE run --rm import-images
+        $DOCKER_COMPOSE run --rm import-sixth-collection-entity
+        $DOCKER_COMPOSE stop data-seed-service
+        $DOCKER_COMPOSE rm -fv data-seed-service
+
+
+  import-keycloak-realm:
+    dotenv: ['.env']
+    desc: Import and create realm based on `${client-folder}/docker-compose/keycloak/realm-export.json` in the root mongo container
+    cmds:
+      - |
+        client="$(./task-wrapper.sh chose-client)"
+        # Assuming your JSON file is in the current directory
+        JSON_FILE="clients/$client/docker-compose/keycloak/realm-export.json"
+        # Copy the JSON file into the Keycloak container
+        $DOCKER_COMPOSE -f docker-compose.yml cp "$JSON_FILE" keycloak:/tmp/
+        
+        # Configure Keycloak Admin CLI
+        $DOCKER_COMPOSE -f docker-compose.yml exec keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:$PROJECT_PORT/auth --realm master --user admin --password admin
+        
+        # Import the realm from the copied JSON file
+        $DOCKER_COMPOSE -f docker-compose.yml exec keycloak /opt/keycloak/bin/kcadm.sh create realms -f /tmp/realm-export.json
+
+  add-static-key-to-env:
+    desc: Add a static token to the env of a client (a keycloak realm is required)
+    cmds:
+      - |
+        client="$(./task-wrapper.sh chose-client)"
+        
+        # Remove lines containing STATIC_* patterns
+        sed '/^STATIC_JWT=/d' clients/$client/.env > clients/$client/.env.tmp
+        sed '/^STATIC_SERVICE_JWT=/d' clients/$client/.env.tmp > clients/$client/.env
+        sed '/^STATIC_PUBLIC_KEY=/d' clients/$client/.env > clients/$client/.env.tmp
+        sed '/^STATIC_ISSUER=/d' clients/$client/.env.tmp > clients/$client/.env
+
+        # Set up Python virtual environment and generate token
+        python3 -m venv venv
+        venv/bin/pip install -q requests --disable-pip-version-check
+        venv/bin/python3 clients/"$client"/scripts/generate-admin-token.py developers >> clients/$client/.env
+        
+        # Enable token requirement
+        sed -i.bak 's/REQUIRE_TOKEN=False/REQUIRE_TOKEN=True/g' clients/$client/.env && rm clients/$client/.env.bak
+        
+        # Clean up
+        rm -rf venv
+
+
+  build-selected-services:
+    desc: TODO -> Build one ore more service for a specific client
+    cmds:
+      - |
+        client="$(./task-wrapper.sh chose-client)"
+        # Read Docker Compose file and extract service names
+        cd "clients/$client" && services=$($DOCKER_COMPOSE config --services)
+      
+        # Use fzf to interactively select services
+        selected_services=$(echo "$services" | fzf --multi --header="Select services to build" --height=50%)
+
+        # Check if any services were selected
+        if [ -z "$selected_services" ]; then
+          echo "No services selected. Exiting.";
+          exit 0;
+        fi
+
+        # Build selected services using docker-compose
+        $DOCKER_COMPOSE build $selected_services
+
+  bootstrap-new-repo:
+    desc: create a new client
+    prompt: You need a empty repo for the common and the ssh url of the client collection-api and graphql repo
+    cmds:
+
+  cypress:
+    desc: Run Cypress tests for a specific client
+    interactive: true
+    cmds:
+      - |
+        options=("coghent-dams" "digipolis-dams" "pza-iot" "vliz-dams" "cultuur-connect-vlac" "digipolis-asset-engine" "vlac-dams")
+
+        echo "Choose a client to run Cypress tests:"
+        select client in $(printf "%s\n" "${options[@]}" | sort); do
+          if [ -n "$client" ]; then
+            echo "Running tests for $client with screenshots on failure"
+            docker-compose exec cypress sh -c "
+              cd /cypress && npx cypress run
+            "
+            break
+          else
+            echo "Invalid option. Please select again."
+          fi
+        done
+
+  
+  links:
+    desc: "Running links task for the selected client"
+    cmds:
+      - |
+        selected_client=$(./task-wrapper.sh chose-client)
+
+        if [ -d "./clients/$selected_client" ]; then
+          echo "Selected client: $selected_client"
+          cd "./clients/$selected_client" || exit 1
+          ./task-wrapper.sh links  # Execute the links task in the client directory
+        else
+          echo "Client '$selected_client' not found."
+          exit 1
+        fi
