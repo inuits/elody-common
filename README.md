@@ -14,9 +14,10 @@ The structure of the file is as follows: `${repo-url} ${folder-to-clone-to}` eac
 
 2. To start an Elody application, you will need to have a customer common repo. This repository contains a same structure as this one, which will pull all needed customer repositories for that specific customer.
 When you have this, you can place the clone ssh url in this `repositories.txt` file together with the directory `clients/${name_of_client}`.
+    *IMPORTANT: The name of the client **has to be** equal to the `PROJECT_FOLDER` variable in the `.env.dist` of the customers common repository.*
     *TIP: Remember the file structure noted above.*
 
-3. Now, when you execute the `task clone-repos` command again, customer repos will also be pulled. After this you can go further with setting up an Elody application. 
+4. Now, when you execute the `task clone-repos` command again, customer repos will also be pulled. After this you can go further with setting up an Elody application. 
 
 #### An example flow
 *Important: For when you have added te customer repo*
