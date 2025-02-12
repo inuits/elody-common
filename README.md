@@ -26,13 +26,12 @@ When you have this, you can place the clone ssh url in this `repositories.txt` f
 1. Install `task` command from [taskfile.dev](https://taskfile.dev/installation/) (if not available).
 2. Run `task` to see what commands are available
 3. Run `task setup-env` (this command runs multiple task commands, advised to check the commands to understand what is happening).
-4. Configure your credentials for the ENV variable COMPOSER_AUTH to be able to download packages with composer
-5. Run `task build-client`.
-6. Run `task start-client`
-7. Run `task import-keycloak-realm`. *Note: This will add a realm to keycloak which is used for authentication*
-8. Run `task import-mongo-data`. *Note: This will add a user entity to authenticate with*
-9. Run `task add-static-key-to-env`. *Note: This will create a bearer token that is used for authentication*
-10. Run `task start-client` *Note: Recreate the containers so the static key is included in the containers*
+4. Run `task build-client`.
+5. Run `task start-client`
+6. Run `task import-keycloak-realm`. *Note: This will add a realm to keycloak which is used for authentication*
+7. Run `task import-mongo-data`. *Note: This will add a user entity to authenticate with*
+8. Run `task add-static-key-to-env`. *Note: This will create a bearer token that is used for authentication*
+9. Run `task start-client` *Note: Recreate the containers so the static key is included in the containers*
 10. Run `task generate`.
 11. Run `task links` to open all available links and open the application / service you want
 

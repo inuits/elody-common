@@ -65,25 +65,25 @@ services:
     expose:
       - "27017"
 
-  arangodb:
-    image: arangodb:3.10
-    environment:
-      - ARANGO_DB_NAME
-      - ARANGO_ROOT_PASSWORD
-      - ARANGO_READER_USERNAME
-      - ARANGO_READER_PASSWORD
-    volumes:
-      - arango:/var/lib/arangodb3
-      - ./docker-compose/arango/create-arango-users.js:/docker-entrypoint-initdb.d/create-arango-users.js
-      - ./docker-compose/arango/entrypoint.sh:/entrypoint.sh
-    networks:
-      - elody
-    expose:
-      - "8529"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.arangodb.rule=Host(`arangodb.localhost`) && PathPrefix(`/`)"
-      - "traefik.http.services.arangodb.loadbalancer.server.port=8529"
+#  arangodb:
+#    image: arangodb:3.10
+#    environment:
+#      - ARANGO_DB_NAME
+#      - ARANGO_ROOT_PASSWORD
+#      - ARANGO_READER_USERNAME
+#      - ARANGO_READER_PASSWORD
+#    volumes:
+#      - arango:/var/lib/arangodb3
+#      - ./docker-compose/arango/create-arango-users.js:/docker-entrypoint-initdb.d/create-arango-users.js
+#      - ./docker-compose/arango/entrypoint.sh:/entrypoint.sh
+#    networks:
+#      - elody
+#    expose:
+#      - "8529"
+#    labels:
+#      - "traefik.enable=true"
+#      - "traefik.http.routers.arangodb.rule=Host(`arangodb.localhost`) && PathPrefix(`/`)"
+#      - "traefik.http.services.arangodb.loadbalancer.server.port=8529"
 
   keycloakdb:
     image: mariadb:10.8.2
@@ -154,22 +154,22 @@ services:
       - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
     restart: unless-stopped
 
-  cypress:
-    image: cypress/included:latest
-    environment:
-      - NPM_CONFIG_REGISTRY
-      - NPM_CONFIG__AUTH_TOKEN
-    volumes:
-      - ./cypress:/cypress
-    networks:
-      - elody
-    expose:
-      - "8080"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.cypress.rule=Host(`cypress.localhost`)"
-      - "traefik.http.services.cypress.loadbalancer.server.port=8080"
-    entrypoint: ["/bin/sh", "-c", "cd /cypress && npm install && npx cypress install && npx cypress run"]
+#  cypress:
+#    image: cypress/included:latest
+#    environment:
+#      - NPM_CONFIG_REGISTRY
+#      - NPM_CONFIG__AUTH_TOKEN
+#    volumes:
+#      - ./cypress:/cypress
+#    networks:
+#      - elody
+#    expose:
+#      - "8080"
+#    labels:
+#      - "traefik.enable=true"
+#      - "traefik.http.routers.cypress.rule=Host(`cypress.localhost`)"
+#      - "traefik.http.services.cypress.loadbalancer.server.port=8080"
+#    entrypoint: ["/bin/sh", "-c", "cd /cypress && npm install && npx cypress install && npx cypress run"]
 
 networks:
   traefik:
